@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Narrative Cards - Worldbuilding Tool</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1 class="logo">
+                    <span class="logo-icon">◇</span>
+                    Narrative Cards
+                </h1>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <button class="nav-btn active" data-view="cards">
+                    <span class="nav-icon">📚</span>
+                    Explorar Cards
+                </button>
+                <button class="nav-btn" data-view="create">
+                    <span class="nav-icon">✦</span>
+                    Criar Novo Card
+                </button>
+            </nav>
+
+            <div class="sidebar-cards-list">
+                <h3>Cards Criados</h3>
+                <div class="search-box">
+                    <input type="text" id="search-cards" placeholder="Buscar cards...">
+                </div>
+                <ul id="cards-list" class="cards-list">
+                    <!-- Cards will be populated here -->
+                </ul>
+            </div>
+
+            <div class="sidebar-actions">
+                <button class="action-btn" onclick="exportCards()" title="Exportar Cards">
+                    <span>📤</span> Exportar
+                </button>
+                <button class="action-btn" onclick="document.getElementById('import-file').click()" title="Importar Cards">
+                    <span>📥</span> Importar
+                </button>
+                <input type="file" id="import-file" accept=".json" style="display: none;" onchange="importCards(event)">
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Cards View -->
+            <section id="cards-view" class="view active">
+                <div class="welcome-screen" id="welcome-screen">
+                    <div class="welcome-content">
+                        <div class="welcome-icon">◇</div>
+                        <h2>Bem-vindo ao Narrative Cards</h2>
+                        <p>Uma ferramenta para organizar suas histórias, campanhas de RPG e mundos fictícios.</p>
+                        <div class="welcome-actions">
+                            <button class="btn-primary" onclick="showView('create')">
+                                <span>✦</span> Criar Primeiro Card
+                            </button>
+                        </div>
+                        <div class="welcome-tips">
+                            <div class="tip">
+                                <span class="tip-icon evento-bg">⚡</span>
+                                <div>
+                                    <strong>Eventos</strong>
+                                    <p>Acontecimentos importantes da narrativa</p>
+                                </div>
+                            </div>
+                            <div class="tip">
+                                <span class="tip-icon local-bg">🏛</span>
+                                <div>
+                                    <strong>Locais</strong>
+                                    <p>Lugares com conexões e personagens</p>
+                                </div>
+                            </div>
+                            <div class="tip">
+                                <span class="tip-icon personagem-bg">👤</span>
+                                <div>
+                                    <strong>Personagens</strong>
+                                    <p>Pessoas com vínculos e histórias</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Carousel Display Area -->
+                <div class="carousel-container" id="carousel-container">
+                    <!-- Eventos Carousel -->
+                    <div class="carousel-section" id="carousel-eventos">
+                        <div class="carousel-header">
+                            <div class="carousel-title">
+                                <span class="carousel-icon evento">⚡</span>
+                                <h2>Eventos</h2>
+                            </div>
+                            <div class="carousel-nav">
+                                <button class="carousel-arrow left" onclick="scrollCarousel('eventos', -1)">‹</button>
+                                <button class="carousel-arrow right" onclick="scrollCarousel('eventos', 1)">›</button>
+                            </div>
+                        </div>
+                        <div class="carousel-track-wrapper">
+                            <div class="carousel-track" id="track-eventos" data-type="evento">
+                                <!-- Cards will be rendered here -->
+                            </div>
+                        </div>
+                        <div class="carousel-empty" id="empty-eventos">
+                            <span>Nenhum evento criado</span>
+                            <button class="btn-small" onclick="showView('create'); selectTypeFromCarousel('evento')">+ Criar Evento</button>
+                        </div>
+                    </div>
+
+                    <!-- Locais Carousel -->
+                    <div class="carousel-section" id="carousel-locais">
+                        <div class="carousel-header">
+                            <div class="carousel-title">
+                                <span class="carousel-icon local">🏛</span>
+                                <h2>Locais</h2>
+                            </div>
+                            <div class="carousel-nav">
+                                <button class="carousel-arrow left" onclick="scrollCarousel('locais', -1)">‹</button>
+                                <button class="carousel-arrow right" onclick="scrollCarousel('locais', 1)">›</button>
+                            </div>
+                        </div>
+                        <div class="carousel-track-wrapper">
+                            <div class="carousel-track" id="track-locais" data-type="local">
+                                <!-- Cards will be rendered here -->
+                            </div>
+                        </div>
+                        <div class="carousel-empty" id="empty-locais">
+                            <span>Nenhum local criado</span>
+                            <button class="btn-small" onclick="showView('create'); selectTypeFromCarousel('local')">+ Criar Local</button>
+                        </div>
+                    </div>
+
+                    <!-- Personagens Carousel -->
+                    <div class="carousel-section" id="carousel-personagens">
+                        <div class="carousel-header">
+                            <div class="carousel-title">
+                                <span class="carousel-icon personagem">👤</span>
+                                <h2>Personagens</h2>
+                            </div>
+                            <div class="carousel-nav">
+                                <button class="carousel-arrow left" onclick="scrollCarousel('personagens', -1)">‹</button>
+                                <button class="carousel-arrow right" onclick="scrollCarousel('personagens', 1)">›</button>
+                            </div>
+                        </div>
+                        <div class="carousel-track-wrapper">
+                            <div class="carousel-track" id="track-personagens" data-type="personagem">
+                                <!-- Cards will be rendered here -->
+                            </div>
+                        </div>
+                        <div class="carousel-empty" id="empty-personagens">
+                            <span>Nenhum personagem criado</span>
+                            <button class="btn-small" onclick="showView('create'); selectTypeFromCarousel('personagem')">+ Criar Personagem</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card Detail Overlay -->
+                <div class="card-detail-overlay" id="card-detail-overlay" onclick="closeCardDetail(event)">
+                    <div class="card-detail-container" id="card-detail-container">
+                        <!-- Detailed card will be rendered here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Create/Edit View -->
+            <section id="create-view" class="view">
+                <div class="create-container">
+                    <div class="create-header">
+                        <h2 id="form-title">Criar Novo Card</h2>
+                        <p class="create-subtitle">Escolha o tipo e preencha as informações</p>
+                    </div>
+
+                    <form id="card-form" class="card-form">
+                        <input type="hidden" id="card-id" value="">
+                        
+                        <!-- Card Type Selection -->
+                        <div class="form-section type-selection">
+                            <label>Tipo do Card</label>
+                            <div class="type-buttons">
+                                <button type="button" class="type-btn" data-type="evento">
+                                    <span class="type-icon">⚡</span>
+                                    <span class="type-name">Evento</span>
+                                    <span class="type-desc">Acontecimento narrativo</span>
+                                </button>
+                                <button type="button" class="type-btn" data-type="local">
+                                    <span class="type-icon">🏛</span>
+                                    <span class="type-name">Local</span>
+                                    <span class="type-desc">Lugar do mundo</span>
+                                </button>
+                                <button type="button" class="type-btn" data-type="personagem">
+                                    <span class="type-icon">👤</span>
+                                    <span class="type-name">Personagem</span>
+                                    <span class="type-desc">Pessoa da história</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Common Fields - Minimal -->
+                        <div class="form-section" id="common-fields" style="display: none;">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="card-name">Nome *</label>
+                                    <input type="text" id="card-name" required placeholder="Nome do card" maxlength="60">
+                                </div>
+                                <div class="form-group form-group-small">
+                                    <label for="card-number">Nº</label>
+                                    <input type="number" id="card-number" min="1">
+                                </div>
+                            </div>
+                            
+                            <!-- Image Upload - Compact -->
+                            <div class="form-group">
+                                <div class="image-upload-compact">
+                                    <div class="image-preview-mini" id="image-preview" onclick="document.getElementById('card-image').click()">
+                                        <span id="image-placeholder">🖼 Imagem</span>
+                                        <img id="preview-img" src="" alt="Preview" style="display: none;">
+                                    </div>
+                                    <button type="button" class="btn-remove-img" id="remove-image-btn" style="display: none;" onclick="removeCardImage()">×</button>
+                                    <input type="file" id="card-image" accept="image/*" onchange="handleImageUpload(event)" style="display: none;">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ========================================
+                             CASCADE EDITOR - Visual Node Builder
+                             ======================================== -->
+                        <div class="form-section" id="cascade-editor-section" style="display: none;">
+                            <div class="cascade-editor">
+                                <div class="cascade-toolbar">
+                                    <span class="cascade-toolbar-label">Editor de Cascata</span>
+                                    <div class="cascade-toolbar-actions">
+                                        <button type="button" class="btn-add-node" onclick="addCascadeNode()">+ Nó</button>
+                                    </div>
+                                </div>
+                                
+                                <div class="cascade-canvas" id="cascade-canvas">
+                                    <div class="cascade-empty" id="cascade-empty">
+                                        <span>Clique em "+ Nó" para começar</span>
+                                    </div>
+                                    <div class="cascade-nodes" id="cascade-nodes">
+                                        <!-- Nodes will be rendered here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Connections Section - Compact -->
+                        <div class="form-section" id="connections-section" style="display: none;">
+                            <div class="connections-compact">
+                                <label>🔗 Conexões com outros cards</label>
+                                <div class="connection-chips" id="connection-chips"></div>
+                                <select id="connection-select" class="connection-select-compact" onchange="addConnectionFromSelect(this)">
+                                    <option value="">+ Conectar card...</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Hidden fields for legacy data -->
+                        <input type="hidden" id="card-description">
+                        <input type="hidden" id="card-resumo">
+                        <input type="hidden" id="card-notas">
+                        <input type="hidden" id="evento-consequences">
+                        <input type="hidden" id="evento-hooks">
+                        <input type="hidden" id="local-atmosfera">
+                        <input type="hidden" id="local-segredos">
+                        <input type="hidden" id="personagem-occupation">
+                        <input type="hidden" id="personagem-age">
+                        <input type="hidden" id="personagem-race">
+                        <input type="hidden" id="personagem-appearance">
+                        <input type="hidden" id="personagem-personality">
+                        <input type="hidden" id="personagem-history">
+                        <input type="hidden" id="personagem-secrets">
+                        <input type="hidden" id="personagem-stats">
+
+                        <!-- Form Actions -->
+                        <div class="form-actions" id="form-actions" style="display: none;">
+                            <button type="button" class="btn-secondary" onclick="resetForm()">Cancelar</button>
+                            <button type="submit" class="btn-primary">
+                                <span id="submit-text">Criar Card</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Node Type Selector Modal -->
+    <div class="node-type-modal" id="node-type-modal" style="display: none;">
+        <div class="node-type-modal-content">
+            <div class="node-type-modal-header">
+                <span>Tipo do Nó</span>
+                <button type="button" onclick="closeNodeTypeModal()">×</button>
+            </div>
+            <div class="node-type-options" id="node-type-options">
+                <!-- Options populated by JS based on card type -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Menu Toggle -->
+    <button class="mobile-menu-toggle" id="mobile-menu-toggle" onclick="toggleMobileMenu()" aria-label="Menu">
+        ☰
+    </button>
+
+    <!-- Sidebar Overlay for Mobile -->
+    <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeMobileMenu()"></div>
+
+    <!-- Card Detail Modal/Overlay for editing -->
+    <div class="modal-overlay" id="modal-overlay">
+        <div class="modal-content" id="modal-content">
+            <!-- Modal content will be injected here -->
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Card Link Modal -->
+    <div class="link-modal-overlay" id="link-modal-overlay">
+        <div class="link-modal">
+            <div class="link-modal-header">
+                <h3>🔗 Linkar a um Card</h3>
+                <button type="button" class="link-modal-close" onclick="closeLinkModal()">×</button>
+            </div>
+            <div class="link-modal-body">
+                <div class="link-search-container">
+                    <input type="text" id="link-search-input" placeholder="Buscar card..." oninput="filterLinkCards(this.value)">
+                </div>
+                <div class="link-cards-list" id="link-cards-list">
+                    <!-- Cards will be listed here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Tag Modal -->
+    <div class="tag-modal-overlay" id="tag-modal-overlay">
+        <div class="tag-modal">
+            <div class="tag-modal-header">
+                <h3><span class="tag-modal-icon">#</span> Criar Tag Personalizada</h3>
+                <button type="button" class="tag-modal-close" onclick="closeTagModal()">×</button>
+            </div>
+            <div class="tag-modal-body">
+                <div class="tag-preview-section">
+                    <span class="tag-preview-label">Preview:</span>
+                    <span class="tag-preview" id="tag-preview">
+                        <span class="tag-preview-text">texto selecionado</span>
+                    </span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="tag-name-input">Nome da Tag *</label>
+                    <input type="text" id="tag-name-input" placeholder="Ex: importante, secreto, pista...">
+                    <span class="input-hint">Este nome aparecerá ao passar o mouse sobre a tag</span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="tag-description-input">Descrição (opcional)</label>
+                    <textarea id="tag-description-input" rows="3" placeholder="Adicione uma nota, contexto ou explicação para esta tag..."></textarea>
+                    <span class="input-hint">A descrição aparece no tooltip ao passar o mouse</span>
+                </div>
+                
+                <div class="form-group">
+                    <label>Cor da Tag</label>
+                    <div class="tag-color-picker" id="tag-color-picker">
+                        <button type="button" class="tag-color-option" data-color="yellow" style="--tag-color: #f0d060;" title="Amarelo"></button>
+                        <button type="button" class="tag-color-option" data-color="orange" style="--tag-color: #f59e6b;" title="Laranja"></button>
+                        <button type="button" class="tag-color-option" data-color="red" style="--tag-color: #e57373;" title="Vermelho"></button>
+                        <button type="button" class="tag-color-option" data-color="pink" style="--tag-color: #f48fb1;" title="Rosa"></button>
+                        <button type="button" class="tag-color-option" data-color="purple" style="--tag-color: #b088f5;" title="Roxo"></button>
+                        <button type="button" class="tag-color-option" data-color="blue" style="--tag-color: #6bb3f5;" title="Azul"></button>
+                        <button type="button" class="tag-color-option" data-color="cyan" style="--tag-color: #4dd0e1;" title="Ciano"></button>
+                        <button type="button" class="tag-color-option" data-color="green" style="--tag-color: #81c784;" title="Verde"></button>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Linkar a um Card (opcional)</label>
+                    <select id="tag-link-card" class="connection-select">
+                        <option value="">Sem link - apenas tag visual</option>
+                    </select>
+                    <span class="input-hint">Se vinculado, clicar na tag abre o card</span>
+                </div>
+                
+                <div class="tag-modal-actions">
+                    <button type="button" class="btn-secondary" onclick="closeTagModal()">Cancelar</button>
+                    <button type="button" class="btn-primary" onclick="applyCustomTag()">
+                        <span>✓</span> Aplicar Tag
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dice Roll Modal -->
+    <div class="dice-modal-overlay" id="dice-modal-overlay">
+        <div class="dice-modal">
+            <div class="dice-modal-header">
+                <h3><span class="dice-modal-icon">🎲</span> Inserir Rolagem</h3>
+                <button type="button" class="dice-modal-close" onclick="closeDiceModal()">×</button>
+            </div>
+            <div class="dice-modal-body">
+                <div class="form-group">
+                    <label for="dice-name-input">Nome da Ação *</label>
+                    <input type="text" id="dice-name-input" placeholder="Ex: Teste de Percepção, Ataque corpo-a-corpo...">
+                    <span class="input-hint">Nome que aparecerá no botão</span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="dice-description-input">Descrição (opcional)</label>
+                    <textarea id="dice-description-input" rows="2" placeholder="Descreva quando ou como usar esta rolagem..."></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="dice-formula-input">Fórmula do Dado *</label>
+                    <input type="text" id="dice-formula-input" placeholder="Ex: 1d20, 2d6+3, 1d20+5...">
+                    <span class="input-hint">Formatos: 1d20, 2d6, 3d8+2, 1d20+5, etc.</span>
+                </div>
+                
+                <div class="dice-preview-section">
+                    <span class="dice-preview-label">Preview:</span>
+                    <span class="dice-roll-tag preview" id="dice-preview">
+                        <span class="dice-icon">🎲</span>
+                        <span class="dice-name">Nome da Ação</span>
+                    </span>
+                </div>
+            </div>
+            
+            <div class="dice-modal-actions">
+                <button type="button" class="btn-secondary" onclick="closeDiceModal()">Cancelar</button>
+                <button type="button" class="btn-primary" onclick="insertDiceRoll()">
+                    <span>🎲</span> Inserir Rolagem
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Highlight Color Picker Popup -->
+    <div class="highlight-picker" id="highlight-picker">
+        <button type="button" class="highlight-color" data-color="yellow" style="--hl-color: rgba(240, 208, 96, 0.4);"></button>
+        <button type="button" class="highlight-color" data-color="green" style="--hl-color: rgba(129, 199, 132, 0.4);"></button>
+        <button type="button" class="highlight-color" data-color="blue" style="--hl-color: rgba(107, 179, 245, 0.4);"></button>
+        <button type="button" class="highlight-color" data-color="pink" style="--hl-color: rgba(244, 143, 177, 0.4);"></button>
+        <button type="button" class="highlight-color" data-color="purple" style="--hl-color: rgba(176, 136, 245, 0.4);"></button>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
