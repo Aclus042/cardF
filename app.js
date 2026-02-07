@@ -1087,6 +1087,7 @@ class UIController {
 
     handleFormSubmit() {
         const name = document.getElementById('card-name').value.trim();
+        const resumo = document.getElementById('card-resumo').value.trim();
         
         if (!this.selectedType) {
             this.showToast('Selecione um tipo de card', 'error');
@@ -1117,6 +1118,7 @@ class UIController {
 
         const cardData = {
             type: this.selectedType,
+            resumo: resumo,
             name: name,
             number: cardNumber,
             nodes: nodes,
@@ -1324,6 +1326,21 @@ class UIController {
         // Populate common fields
         document.getElementById('card-name').value = card.name || '';
         document.getElementById('card-number').value = card.number || '';
+        document.getElementById('card-resumo').value = card.resumo || '';
+        
+        // Update character counter
+        const charCount = document.getElementById('resumo-char-count');
+        if (charCount) {
+            const length = (card.resumo || '').length;
+            charCount.textContent = length;
+            if (length > 150) {
+                charCount.style.color = 'var(--color-evento)';
+            } else if (length > 120) {
+                charCount.style.color = 'var(--color-accent)';
+            } else {
+                charCount.style.color = '';
+            }
+        }
         
         // Load image data
         if (card.imagePositionX !== undefined) {
@@ -1429,6 +1446,13 @@ class UIController {
 
         // Clear all inputs
         document.getElementById('card-form').reset();
+        
+        // Reset character counter
+        const charCount = document.getElementById('resumo-char-count');
+        if (charCount) {
+            charCount.textContent = '0';
+            charCount.style.color = '';
+        }
 
         // Clear image data
         clearCardImageData();
@@ -2890,7 +2914,37 @@ document.addEventListener('DOMContentLoaded', () => {
     initApp();
     initRichEditors();
     initEventConnections();
+    initResumoCharCounter();
 });
+
+// =====================================================
+// CHARACTER COUNTER FOR RESUMO
+// =====================================================
+
+function initResumoCharCounter() {
+    const resumoInput = document.getElementById('card-resumo');
+    const charCount = document.getElementById('resumo-char-count');
+    
+    if (resumoInput && charCount) {
+        const updateCounter = () => {
+            const length = resumoInput.value.length;
+            charCount.textContent = length;
+            
+            // Change color based on length
+            if (length > 150) {
+                charCount.style.color = 'var(--color-evento)'; // Red-ish warning
+            } else if (length > 120) {
+                charCount.style.color = 'var(--color-accent)'; // Yellow-ish warning
+            } else {
+                charCount.style.color = ''; // Default
+            }
+        };
+        
+        resumoInput.addEventListener('input', updateCounter);
+        // Initialize on page load
+        updateCounter();
+    }
+}
 
 // =====================================================
 // EVENT CONNECTIONS (Locais e Personagens relacionados)
@@ -3047,12 +3101,37 @@ function setCardTags(tags) {
     renderTagsList();
 }
 // =====================================================
-// CASCADE EDITOR - Visual Node Builder
+// MINDMAP EDITOR - Visual Mind Mapping (Miro-style)
 // =====================================================
 
-let cascadeNodes = [];
+let cascadeNodes = []; // Keep for compatibility
 let cardConnections = [];
-let pendingNodeParent = null;
+let mindMapNodes = [];
+let mindMapConnections = [];
+let mindMapDragState = {
+    isDragging: false,
+    nodeId: null,
+    startX: 0,
+    startY: 0,
+    offsetX: 0,
+    offsetY: 0
+};
+let mindMapPanState = {
+    isPanning: false,
+    startX: 0,
+    startY: 0,
+    offsetX: 0,
+    offsetY: 0
+};
+let mindMapConnectionState = {
+    isConnecting: false,
+    fromNodeId: null,
+    fromAnchor: null,
+    tempLine: null
+};
+let mindMapScale = 1;
+let mindMapPanOffset = { x: 0, y: 0 };
+let pendingConnection = null;
 
 // Node type definitions by card type
 const nodeTypesByCardType = {
@@ -3077,9 +3156,749 @@ const nodeTypesByCardType = {
     ]
 };
 
-function addCascadeNode(parentIndex = null) {
-    pendingNodeParent = parentIndex;
+// Add MindMap Node
+function addMindMapNode() {
     showNodeTypeModal();
+}
+
+function createNode(type, icon) {
+    const canvas = document.getElementById('mindmap-canvas');
+    const rect = canvas.getBoundingClientRect();
+    
+    const newNode = {
+        id: Date.now(),
+        type: type,
+        icon: icon,
+        label: '',
+        x: Math.random() * (rect.width - 200) + 50,
+        y: Math.random() * (rect.height - 100) + 50
+    };
+    
+    mindMapNodes.push(newNode);
+    
+    // Convert to old format for compatibility
+    cascadeNodes.push({
+        id: newNode.id,
+        type: newNode.type,
+        icon: newNode.icon,
+        label: newNode.label,
+        children: []
+    });
+    
+    closeNodeTypeModal();
+    renderMindMap();
+    
+    // Focus the new node
+    setTimeout(() => {
+        const node = document.querySelector(`[data-node-id="${newNode.id}"] textarea`);
+        if (node) node.focus();
+    }, 100);
+}
+
+function renderMindMap() {
+    const container = document.getElementById('mindmap-nodes');
+    const emptyMsg = document.getElementById('mindmap-empty');
+    const svgConnections = document.getElementById('mindmap-connections');
+    
+    if (!container) return;
+    
+    if (mindMapNodes.length === 0) {
+        container.innerHTML = '';
+        if (emptyMsg) emptyMsg.style.display = 'flex';
+        if (svgConnections) svgConnections.innerHTML = '';
+        return;
+    }
+    
+    if (emptyMsg) emptyMsg.style.display = 'none';
+    
+    // Render nodes
+    container.innerHTML = mindMapNodes.map(node => `
+        <div class="mindmap-node" 
+             data-node-id="${node.id}"
+             style="left: ${node.x}px; top: ${node.y}px;"
+             onmousedown="startMindMapDrag(event, ${node.id})"
+             oncontextmenu="showNodeContextMenu(event, ${node.id})">
+            <div class="mindmap-node-icon ${node.type}">${node.icon}</div>
+            <textarea class="mindmap-node-input"
+                      placeholder="Escreva aqui..."
+                      maxlength="200"
+                      rows="1"
+                      oninput="autoResizeTextarea(this); updateMindMapNodeLabel(${node.id}, this.value)"
+                      onclick="event.stopPropagation()"
+                      onkeydown="handleMindMapNodeKeydown(event, ${node.id})">${node.label || ''}</textarea>
+        </div>
+    `).join('');
+    
+    // Auto-resize all textareas
+    setTimeout(() => {
+        document.querySelectorAll('.mindmap-node-input').forEach(ta => autoResizeTextarea(ta));
+    }, 0);
+    
+    // Render connections
+    renderMindMapConnections();
+    
+    // Render connections (empty for now)
+    if (svgConnections) {
+        svgConnections.innerHTML = '';
+    }
+}
+
+function startMindMapDrag(event, nodeId) {
+    // Don't start drag if in connection mode
+    if (mindMapConnectionState.isConnecting) {
+        return;
+    }
+    
+    if (event.target.tagName === 'TEXTAREA' || event.target.tagName === 'BUTTON') {
+        return;
+    }
+    
+    event.preventDefault();
+    
+    const node = mindMapNodes.find(n => n.id === nodeId);
+    if (!node) return;
+    
+    mindMapDragState.isDragging = true;
+    mindMapDragState.nodeId = nodeId;
+    mindMapDragState.startX = event.clientX;
+    mindMapDragState.startY = event.clientY;
+    mindMapDragState.offsetX = node.x;
+    mindMapDragState.offsetY = node.y;
+    
+    const nodeEl = document.querySelector(`[data-node-id="${nodeId}"]`);
+    if (nodeEl) nodeEl.classList.add('dragging');
+    
+    document.addEventListener('mousemove', onMindMapDrag);
+    document.addEventListener('mouseup', endMindMapDrag);
+}
+
+function onMindMapDrag(event) {
+    if (!mindMapDragState.isDragging) return;
+    
+    // Use requestAnimationFrame for smooth updates
+    if (mindMapDragState.animationFrame) {
+        cancelAnimationFrame(mindMapDragState.animationFrame);
+    }
+    
+    mindMapDragState.animationFrame = requestAnimationFrame(() => {
+        const deltaX = (event.clientX - mindMapDragState.startX) / mindMapScale;
+        const deltaY = (event.clientY - mindMapDragState.startY) / mindMapScale;
+        
+        const node = mindMapNodes.find(n => n.id === mindMapDragState.nodeId);
+        if (!node) return;
+        
+        node.x = mindMapDragState.offsetX + deltaX;
+        node.y = mindMapDragState.offsetY + deltaY;
+        
+        const nodeEl = document.querySelector(`[data-node-id="${node.id}"]`);
+        if (nodeEl) {
+            nodeEl.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+        }
+        
+        // Update connections less frequently
+        if (!mindMapDragState.lastConnectionUpdate || Date.now() - mindMapDragState.lastConnectionUpdate > 16) {
+            renderMindMapConnections();
+            mindMapDragState.lastConnectionUpdate = Date.now();
+        }
+    });
+}
+
+function endMindMapDrag() {
+    if (mindMapDragState.nodeId) {
+        const node = mindMapNodes.find(n => n.id === mindMapDragState.nodeId);
+        const nodeEl = document.querySelector(`[data-node-id="${mindMapDragState.nodeId}"]`);
+        
+        if (nodeEl && node) {
+            // Apply final position
+            nodeEl.style.left = node.x + 'px';
+            nodeEl.style.top = node.y + 'px';
+            nodeEl.style.transform = '';
+            nodeEl.classList.remove('dragging');
+        }
+        
+        // Final connection update
+        renderMindMapConnections();
+    }
+    
+    if (mindMapDragState.animationFrame) {
+        cancelAnimationFrame(mindMapDragState.animationFrame);
+    }
+    
+    mindMapDragState.isDragging = false;
+    mindMapDragState.nodeId = null;
+    mindMapDragState.animationFrame = null;
+    mindMapDragState.lastConnectionUpdate = null;
+    
+    document.removeEventListener('mousemove', onMindMapDrag);
+    document.removeEventListener('mouseup', endMindMapDrag);
+}
+
+function updateMindMapNodeLabel(nodeId, value) {
+    const node = mindMapNodes.find(n => n.id === nodeId);
+    if (node) {
+        node.label = value;
+        
+        // Update cascadeNodes for compatibility
+        const cascadeNode = cascadeNodes.find(n => n.id === nodeId);
+        if (cascadeNode) {
+            cascadeNode.label = value;
+        }
+    }
+}
+
+function deleteMindMapNode(event, nodeId) {
+    if (event) event.stopPropagation();
+    
+    // Remove connections to/from this node
+    mindMapConnections = mindMapConnections.filter(conn => 
+        conn.fromNode !== nodeId && conn.toNode !== nodeId
+    );
+    
+    mindMapNodes = mindMapNodes.filter(n => n.id !== nodeId);
+    cascadeNodes = cascadeNodes.filter(n => n.id !== nodeId);
+    
+    renderMindMap();
+}
+
+// Context menu system
+let contextMenuState = {
+    isOpen: false,
+    nodeId: null
+};
+
+function showNodeContextMenu(event, nodeId) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    // Don't show context menu if clicking on textarea
+    if (event.target.tagName === 'TEXTAREA') {
+        return;
+    }
+    
+    // Remove existing menu
+    closeContextMenu();
+    
+    // Create context menu
+    const menu = document.createElement('div');
+    menu.className = 'mindmap-context-menu';
+    menu.id = 'mindmap-context-menu';
+    menu.innerHTML = `
+        <div class="context-menu-item" onclick="startConnectionFromContextMenu(${nodeId})">
+            <span class="context-menu-icon">⟶</span>
+            <span>Criar conexão</span>
+        </div>
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item delete" onclick="deleteMindMapNode(null, ${nodeId}); closeContextMenu();">
+            <span class="context-menu-icon">×</span>
+            <span>Apagar nó</span>
+        </div>
+    `;
+    
+    // Position menu
+    menu.style.left = event.clientX + 'px';
+    menu.style.top = event.clientY + 'px';
+    
+    document.body.appendChild(menu);
+    
+    contextMenuState.isOpen = true;
+    contextMenuState.nodeId = nodeId;
+    
+    // Close on click outside
+    setTimeout(() => {
+        document.addEventListener('click', closeContextMenu);
+        document.addEventListener('contextmenu', closeContextMenu);
+    }, 0);
+}
+
+function closeContextMenu() {
+    const menu = document.getElementById('mindmap-context-menu');
+    if (menu) {
+        menu.remove();
+    }
+    
+    contextMenuState.isOpen = false;
+    contextMenuState.nodeId = null;
+    
+    document.removeEventListener('click', closeContextMenu);
+    document.removeEventListener('contextmenu', closeContextMenu);
+}
+
+function startConnectionFromContextMenu(nodeId) {
+    closeContextMenu();
+    
+    mindMapConnectionState.isConnecting = true;
+    mindMapConnectionState.fromNodeId = nodeId;
+    
+    // Change cursor
+    document.body.style.cursor = 'crosshair';
+    
+    // Visual feedback on source node
+    const sourceNode = document.querySelector(`[data-node-id="${nodeId}"]`);
+    if (sourceNode) {
+        sourceNode.classList.add('connecting');
+    }
+    
+    document.addEventListener('mousemove', drawTempConnectionFromNode);
+    document.addEventListener('mousedown', endConnectionFromNode);
+    document.addEventListener('contextmenu', cancelConnection);
+}
+
+function cancelConnection(event) {
+    if (!mindMapConnectionState.isConnecting) return;
+    
+    event.preventDefault();
+    event.stopPropagation();
+    
+    document.body.style.cursor = '';
+    
+    // Remove temp line
+    const svg = document.getElementById('mindmap-connections');
+    const temp = svg.querySelector('.mindmap-connection-temp');
+    if (temp) temp.remove();
+    
+    // Remove visual feedback
+    const sourceNode = document.querySelector(`[data-node-id="${mindMapConnectionState.fromNodeId}"]`);
+    if (sourceNode) {
+        sourceNode.classList.remove('connecting');
+    }
+    
+    mindMapConnectionState.isConnecting = false;
+    mindMapConnectionState.fromNodeId = null;
+    
+    document.removeEventListener('mousemove', drawTempConnectionFromNode);
+    document.removeEventListener('mousedown', endConnectionFromNode);
+    document.removeEventListener('contextmenu', cancelConnection);
+}
+
+function drawTempConnectionFromNode(event) {
+    if (!mindMapConnectionState.isConnecting) return;
+    
+    const svg = document.getElementById('mindmap-connections');
+    const fromNode = mindMapNodes.find(n => n.id === mindMapConnectionState.fromNodeId);
+    if (!fromNode) return;
+    
+    const canvas = document.getElementById('mindmap-canvas');
+    const container = document.getElementById('mindmap-nodes');
+    const containerRect = container.getBoundingClientRect();
+    
+    // Mouse position in node coordinate space
+    const mouseX = (event.clientX - containerRect.left) / mindMapScale;
+    const mouseY = (event.clientY - containerRect.top) / mindMapScale;
+    
+    // Calculate closest point on node edge
+    const fromPos = getClosestEdgePoint(fromNode, mouseX, mouseY);
+    
+    // Remove old temp line
+    const oldTemp = svg.querySelector('.mindmap-connection-temp');
+    if (oldTemp) oldTemp.remove();
+    
+    // Draw new temp line
+    const path = createCurvePath(fromPos.x, fromPos.y, mouseX, mouseY);
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    line.setAttribute('d', path);
+    line.setAttribute('class', 'mindmap-connection-temp');
+    svg.appendChild(line);
+}
+
+function endConnectionFromNode(event) {
+    if (!mindMapConnectionState.isConnecting) return;
+    
+    // Only handle left click
+    if (event.button !== 0) return;
+    
+    event.stopPropagation();
+    event.preventDefault();
+    
+    // Check if we're over a node
+    const target = event.target;
+    let toNodeEl = target.closest('.mindmap-node');
+    
+    if (toNodeEl) {
+        const toNodeId = parseInt(toNodeEl.dataset.nodeId);
+        
+        // Don't connect to self
+        if (toNodeId !== mindMapConnectionState.fromNodeId) {
+            // Check if connection already exists (either direction)
+            const exists = mindMapConnections.some(c => 
+                (c.fromNode === mindMapConnectionState.fromNodeId && c.toNode === toNodeId) ||
+                (c.fromNode === toNodeId && c.toNode === mindMapConnectionState.fromNodeId)
+            );
+            
+            if (!exists) {
+                mindMapConnections.push({
+                    fromNode: mindMapConnectionState.fromNodeId,
+                    toNode: toNodeId
+                });
+                renderMindMapConnections();
+            }
+        }
+    }
+    
+    document.body.style.cursor = '';
+    
+    // Remove temp line
+    const svg = document.getElementById('mindmap-connections');
+    const temp = svg.querySelector('.mindmap-connection-temp');
+    if (temp) temp.remove();
+    
+    // Remove visual feedback
+    const sourceNode = document.querySelector(`[data-node-id="${mindMapConnectionState.fromNodeId}"]`);
+    if (sourceNode) {
+        sourceNode.classList.remove('connecting');
+    }
+    
+    mindMapConnectionState.isConnecting = false;
+    mindMapConnectionState.fromNodeId = null;
+    
+    document.removeEventListener('mousemove', drawTempConnectionFromNode);
+    document.removeEventListener('mousedown', endConnectionFromNode);
+    document.removeEventListener('contextmenu', cancelConnection);
+}
+
+// Calculate closest point on node edge to target position
+function getClosestEdgePoint(node, targetX, targetY) {
+    const nodeEl = document.querySelector(`[data-node-id="${node.id}"]`);
+    if (!nodeEl) return { x: node.x, y: node.y };
+    
+    const rect = nodeEl.getBoundingClientRect();
+    const canvas = document.getElementById('mindmap-canvas');
+    const canvasRect = canvas.getBoundingClientRect();
+    
+    const width = rect.width / mindMapScale;
+    const height = rect.height / mindMapScale;
+    
+    // Node center
+    const centerX = node.x + width / 2;
+    const centerY = node.y + height / 2;
+    
+    // Vector from center to target
+    const dx = targetX - centerX;
+    const dy = targetY - centerY;
+    
+    // Find which edge is closest
+    const ratioX = Math.abs(dx / (width / 2));
+    const ratioY = Math.abs(dy / (height / 2));
+    
+    if (ratioX > ratioY) {
+        // Left or right edge
+        const x = dx > 0 ? node.x + width : node.x;
+        const y = centerY;
+        return { x, y };
+    } else {
+        // Top or bottom edge
+        const x = centerX;
+        const y = dy > 0 ? node.y + height : node.y;
+        return { x, y };
+    }
+}
+
+// Connection system
+function startConnection(event, nodeId) {
+    event.stopPropagation();
+    event.preventDefault();
+    
+    console.log('Starting connection from node:', nodeId);
+    
+    mindMapConnectionState.isConnecting = true;
+    mindMapConnectionState.fromNodeId = nodeId;
+    mindMapConnectionState.fromAnchor = 'bottom-right';
+    
+    document.addEventListener('mousemove', drawTempConnection);
+    document.addEventListener('mouseup', endConnection);
+}
+
+function drawTempConnection(event) {
+    if (!mindMapConnectionState.isConnecting) return;
+    
+    const svg = document.getElementById('mindmap-connections');
+    const fromNode = mindMapNodes.find(n => n.id === mindMapConnectionState.fromNodeId);
+    if (!fromNode) return;
+    
+    const fromPos = getAnchorPosition(fromNode, mindMapConnectionState.fromAnchor);
+    
+    const canvas = document.getElementById('mindmap-canvas');
+    const container = document.getElementById('mindmap-nodes');
+    const rect = canvas.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    
+    // Convert mouse position to node coordinate space
+    const toX = (event.clientX - containerRect.left) / mindMapScale;
+    const toY = (event.clientY - containerRect.top) / mindMapScale;
+    
+    // Remove old temp line
+    const oldTemp = svg.querySelector('.mindmap-connection-temp');
+    if (oldTemp) oldTemp.remove();
+    
+    // Draw new temp line
+    const path = createCurvePath(fromPos.x, fromPos.y, toX, toY);
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    line.setAttribute('d', path);
+    line.setAttribute('class', 'mindmap-connection-temp');
+    svg.appendChild(line);
+}
+
+function endConnection(event) {
+    if (!mindMapConnectionState.isConnecting) return;
+    
+    // Remove temp line
+    const svg = document.getElementById('mindmap-connections');
+    const temp = svg.querySelector('.mindmap-connection-temp');
+    if (temp) temp.remove();
+    
+    // Check if we're over a node (anchor or node body)
+    const target = event.target;
+    let toNodeEl = null;
+    
+    if (target.classList.contains('mindmap-node-anchor')) {
+        toNodeEl = target.closest('.mindmap-node');
+    } else if (target.closest('.mindmap-node')) {
+        toNodeEl = target.closest('.mindmap-node');
+    }
+    
+    if (toNodeEl) {
+        const toNodeId = parseInt(toNodeEl.dataset.nodeId);
+        
+        // Don't connect to self
+        if (toNodeId !== mindMapConnectionState.fromNodeId) {
+            // Check if connection already exists
+            const exists = mindMapConnections.some(c => 
+                c.fromNode === mindMapConnectionState.fromNodeId && c.toNode === toNodeId
+            );
+            
+            if (!exists) {
+                mindMapConnections.push({
+                    fromNode: mindMapConnectionState.fromNodeId,
+                    fromAnchor: 'bottom-right',
+                    toNode: toNodeId,
+                    toAnchor: 'center'
+                });
+                renderMindMapConnections();
+            }
+        }
+    }
+    
+    mindMapConnectionState.isConnecting = false;
+    mindMapConnectionState.fromNodeId = null;
+    mindMapConnectionState.fromAnchor = null;
+    
+    document.removeEventListener('mousemove', drawTempConnection);
+    document.removeEventListener('mouseup', endConnection);
+}
+
+function getAnchorPosition(node, anchor) {
+    const nodeEl = document.querySelector(`[data-node-id="${node.id}"]`);
+    if (!nodeEl) return { x: node.x + 150, y: node.y + 25 };
+    
+    // Get actual dimensions from the element
+    const rect = nodeEl.getBoundingClientRect();
+    const canvas = document.getElementById('mindmap-canvas');
+    const canvasRect = canvas.getBoundingClientRect();
+    
+    // Get width and height without scale
+    const width = rect.width / mindMapScale;
+    const height = rect.height / mindMapScale;
+    
+    // Use node's stored x, y position directly
+    if (anchor === 'bottom-right') {
+        // Origin point at bottom right
+        return { x: node.x + width, y: node.y + height };
+    } else {
+        // Destination point at center
+        return { x: node.x + width / 2, y: node.y + height / 2 };
+    }
+}
+
+function createCurvePath(x1, y1, x2, y2) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const offset = Math.min(dist / 2, 50);
+    
+    return `M ${x1} ${y1} C ${x1 + offset} ${y1}, ${x2 - offset} ${y2}, ${x2} ${y2}`;
+}
+
+function renderMindMapConnections() {
+    const svg = document.getElementById('mindmap-connections');
+    if (!svg) return;
+    
+    svg.innerHTML = '';
+    
+    mindMapConnections.forEach((conn, index) => {
+        const fromNode = mindMapNodes.find(n => n.id === conn.fromNode);
+        const toNode = mindMapNodes.find(n => n.id === conn.toNode);
+        
+        if (!fromNode || !toNode) return;
+        
+        // Get node centers
+        const fromNodeEl = document.querySelector(`[data-node-id="${fromNode.id}"]`);
+        const toNodeEl = document.querySelector(`[data-node-id="${toNode.id}"]`);
+        
+        if (!fromNodeEl || !toNodeEl) return;
+        
+        const fromRect = fromNodeEl.getBoundingClientRect();
+        const toRect = toNodeEl.getBoundingClientRect();
+        
+        const fromWidth = fromRect.width / mindMapScale;
+        const fromHeight = fromRect.height / mindMapScale;
+        const toWidth = toRect.width / mindMapScale;
+        const toHeight = toRect.height / mindMapScale;
+        
+        const fromCenterX = fromNode.x + fromWidth / 2;
+        const fromCenterY = fromNode.y + fromHeight / 2;
+        const toCenterX = toNode.x + toWidth / 2;
+        const toCenterY = toNode.y + toHeight / 2;
+        
+        // Calculate edge points
+        const fromPos = getClosestEdgePoint(fromNode, toCenterX, toCenterY);
+        const toPos = getClosestEdgePoint(toNode, fromCenterX, fromCenterY);
+        
+        const path = createCurvePath(fromPos.x, fromPos.y, toPos.x, toPos.y);
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        line.setAttribute('d', path);
+        line.setAttribute('class', 'mindmap-connection-line');
+        line.setAttribute('data-connection-index', index);
+        line.onclick = (e) => {
+            e.stopPropagation();
+            if (confirm('Remover esta conexão?')) {
+                mindMapConnections.splice(index, 1);
+                renderMindMapConnections();
+            }
+        };
+        svg.appendChild(line);
+    });
+}
+
+// Auto-resize textarea
+function autoResizeTextarea(textarea) {
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    const newHeight = Math.max(44, Math.min(textarea.scrollHeight, 200));
+    textarea.style.height = newHeight + 'px';
+}
+
+// Keyboard shortcuts for mindmap nodes
+function handleMindMapNodeKeydown(event, nodeId) {
+    // Enter without shift: add new node
+    if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        addMindMapNode();
+    }
+    // Delete/Backspace on empty: remove node
+    else if ((event.key === 'Delete' || event.key === 'Backspace') && event.target.value === '') {
+        event.preventDefault();
+        const fakeEvent = { stopPropagation: () => {} };
+        deleteMindMapNode(fakeEvent, nodeId);
+    }
+}
+
+function mindMapZoomIn() {
+    mindMapScale = Math.min(mindMapScale + 0.1, 2);
+    applyMindMapTransform();
+}
+
+function mindMapZoomOut() {
+    mindMapScale = Math.max(mindMapScale - 0.1, 0.5);
+    applyMindMapTransform();
+}
+
+function mindMapResetView() {
+    mindMapScale = 1;
+    mindMapPanOffset = { x: 0, y: 0 };
+    applyMindMapTransform();
+}
+
+function applyMindMapTransform() {
+    const container = document.getElementById('mindmap-nodes');
+    const svg = document.getElementById('mindmap-connections');
+    
+    const transform = `scale(${mindMapScale}) translate(${mindMapPanOffset.x}px, ${mindMapPanOffset.y}px)`;
+    
+    if (container) {
+        container.style.transform = transform;
+    }
+    if (svg) {
+        svg.style.transform = transform;
+    }
+    
+    // Redraw connections to update positions
+    renderMindMapConnections();
+}
+
+// Initialize mindmap canvas interactions
+function initMindMapCanvas() {
+    const canvas = document.getElementById('mindmap-canvas');
+    if (!canvas) return;
+    
+    // Scroll wheel for zoom
+    canvas.addEventListener('wheel', (event) => {
+        event.preventDefault();
+        
+        const delta = event.deltaY;
+        const zoomIntensity = 0.1;
+        
+        if (delta < 0) {
+            // Scroll up - zoom in
+            mindMapScale = Math.min(mindMapScale + zoomIntensity, 2);
+        } else {
+            // Scroll down - zoom out
+            mindMapScale = Math.max(mindMapScale - zoomIntensity, 0.3);
+        }
+        
+        applyMindMapTransform();
+    }, { passive: false });
+    
+    // Pan canvas on drag
+    canvas.addEventListener('mousedown', (event) => {
+        // Only pan if clicking on canvas background (not on nodes)
+        if (event.target === canvas || event.target.id === 'mindmap-nodes' || event.target.id === 'mindmap-connections') {
+            mindMapPanState.isPanning = true;
+            mindMapPanState.startX = event.clientX;
+            mindMapPanState.startY = event.clientY;
+            mindMapPanState.offsetX = mindMapPanOffset.x;
+            mindMapPanState.offsetY = mindMapPanOffset.y;
+            
+            canvas.style.cursor = 'grabbing';
+            
+            document.addEventListener('mousemove', onCanvasPan);
+            document.addEventListener('mouseup', endCanvasPan);
+        }
+    });
+}
+
+function onCanvasPan(event) {
+    if (!mindMapPanState.isPanning) return;
+    
+    const deltaX = (event.clientX - mindMapPanState.startX) / mindMapScale;
+    const deltaY = (event.clientY - mindMapPanState.startY) / mindMapScale;
+    
+    mindMapPanOffset.x = mindMapPanState.offsetX + deltaX;
+    mindMapPanOffset.y = mindMapPanState.offsetY + deltaY;
+    
+    applyMindMapTransform();
+}
+
+function endCanvasPan() {
+    mindMapPanState.isPanning = false;
+    
+    const canvas = document.getElementById('mindmap-canvas');
+    if (canvas) canvas.style.cursor = 'grab';
+    
+    document.removeEventListener('mousemove', onCanvasPan);
+    document.removeEventListener('mouseup', endCanvasPan);
+}
+
+// Call init when mindmap is shown
+if (document.getElementById('mindmap-canvas')) {
+    initMindMapCanvas();
+}
+
+// Compatibility functions
+function addCascadeNode() {
+    addMindMapNode();
+}
+
+function renderCascadeNodes() {
+    renderMindMap();
 }
 
 function showNodeTypeModal() {
@@ -3101,35 +3920,6 @@ function showNodeTypeModal() {
 
 function closeNodeTypeModal() {
     document.getElementById('node-type-modal').style.display = 'none';
-    pendingNodeParent = null;
-}
-
-function createNode(type, icon) {
-    const newNode = {
-        id: Date.now(),
-        type: type,
-        icon: icon,
-        label: '',
-        children: []
-    };
-    
-    if (pendingNodeParent !== null) {
-        // Add as child of parent node
-        cascadeNodes[pendingNodeParent].children.push(newNode);
-    } else {
-        // Add to root level
-        cascadeNodes.push(newNode);
-    }
-    
-    closeNodeTypeModal();
-    renderCascadeNodes();
-    
-    // Focus the new node's input
-    setTimeout(() => {
-        const inputs = document.querySelectorAll('.node-input');
-        const lastInput = inputs[inputs.length - 1];
-        if (lastInput) lastInput.focus();
-    }, 50);
 }
 
 function renderCascadeNodes() {
@@ -3154,118 +3944,10 @@ function renderCascadeNodes() {
     container.innerHTML = html;
 }
 
-function renderNodeItem(node, index, parentIndex) {
-    const path = parentIndex !== null ? `${parentIndex}-${index}` : `${index}`;
-    
-    let html = `
-        <div class="cascade-node-item" data-path="${path}">
-            <div class="cascade-node-main">
-                <div class="node-type-badge ${node.type}">${node.icon}</div>
-                <input type="text" 
-                       class="node-input" 
-                       value="${escapeAttr(node.label)}" 
-                       placeholder="Digite aqui (max 100 chars)"
-                       maxlength="100"
-                       onpaste="handleNodePaste(event)"
-                       onkeydown="handleNodeKeydown(event)"
-                       onchange="updateNodeLabel('${path}', this.value)">
-                <div class="node-actions">
-                    <button type="button" class="node-action-btn" onclick="addBranchTo('${path}')" title="Ramificar">↳</button>
-                    <button type="button" class="node-action-btn delete" onclick="deleteNode('${path}')" title="Remover">×</button>
-                </div>
-            </div>
-    `;
-    
-    // Render children (branches)
-    if (node.children && node.children.length > 0) {
-        html += '<div class="node-branches">';
-        node.children.forEach((child, childIndex) => {
-            html += `<div class="branch-item">`;
-            html += renderNodeItem(child, childIndex, path);
-            html += `</div>`;
-        });
-        html += '</div>';
-    }
-    
-    // Connector line if not last root node and no children
-    if (parentIndex === null) {
-        html += '<div class="node-connector"></div>';
-    }
-    
-    html += '</div>';
-    return html;
-}
-
+// Utility functions
 function escapeAttr(str) {
     if (!str) return '';
     return str.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
-
-function handleNodePaste(event) {
-    event.preventDefault();
-    const text = (event.clipboardData || window.clipboardData).getData('text');
-    // Only allow max 100 chars, strip newlines
-    const clean = text.replace(/[\n\r]/g, ' ').substring(0, 100);
-    document.execCommand('insertText', false, clean);
-}
-
-function handleNodeKeydown(event) {
-    if (event.key === 'Enter') {
-        event.preventDefault();
-        // Add new node after current one
-        addCascadeNode();
-    }
-}
-
-function updateNodeLabel(path, value) {
-    const node = getNodeByPath(path);
-    if (node) {
-        node.label = value.substring(0, 100);
-    }
-}
-
-function getNodeByPath(path) {
-    const parts = path.split('-').map(Number);
-    let node = cascadeNodes[parts[0]];
-    
-    for (let i = 1; i < parts.length; i++) {
-        if (node && node.children) {
-            node = node.children[parts[i]];
-        }
-    }
-    
-    return node;
-}
-
-function addBranchTo(path) {
-    const parts = path.split('-').map(Number);
-    pendingNodeParent = parts[0];
-    
-    // If it's a nested path, we need to handle it differently
-    if (parts.length > 1) {
-        // For now, add to the root node at the first index
-        // More complex nesting would require recursive handling
-    }
-    
-    showNodeTypeModal();
-}
-
-function deleteNode(path) {
-    const parts = path.split('-').map(Number);
-    
-    if (parts.length === 1) {
-        // Root level node
-        cascadeNodes.splice(parts[0], 1);
-    } else {
-        // Nested node - find parent and remove child
-        const parentPath = parts.slice(0, -1).join('-');
-        const parent = getNodeByPath(parentPath);
-        if (parent && parent.children) {
-            parent.children.splice(parts[parts.length - 1], 1);
-        }
-    }
-    
-    renderCascadeNodes();
 }
 
 // =====================================================
@@ -3317,17 +3999,22 @@ function setConnections(connections) {
 }
 
 // =====================================================
-// RESET CASCADE EDITOR
+// RESET MINDMAP/CASCADE EDITOR
 // =====================================================
 
 function resetCascadeEditor() {
     cascadeNodes = [];
+    mindMapNodes = [];
+    mindMapConnections = [];
     cardConnections = [];
-    renderCascadeNodes();
+    mindMapScale = 1;
+    mindMapPanOffset = { x: 0, y: 0 };
+    renderMindMap();
     renderConnectionChips();
+    applyMindMapTransform();
 }
 
-// Update resetForm to include cascade reset
+// Update resetForm to include mindmap reset
 const originalResetForm = window.resetForm;
 window.resetForm = function() {
     if (originalResetForm) originalResetForm();

@@ -216,15 +216,26 @@
                                 </div>
                             </div>
                             
-                            <!-- Image Upload - Compact -->
-                            <div class="form-group">
-                                <div class="image-upload-compact">
-                                    <div class="image-preview-mini" id="image-preview" onclick="document.getElementById('card-image').click()">
-                                        <span id="image-placeholder">🖼 Imagem</span>
-                                        <img id="preview-img" src="" alt="Preview" style="display: none;">
+                            <!-- Resumo + Image in Two Columns -->
+                            <div class="form-row-split">
+                                <!-- Resumo Field -->
+                                <div class="form-group form-col-half">
+                                    <label for="card-resumo">Resumo Rápido</label>
+                                    <textarea id="card-resumo" rows="6" placeholder="Uma breve descrição que aparecerá no preview do card..." maxlength="150"></textarea>
+                                    <span class="input-hint"><span id="resumo-char-count">0</span>/150 caracteres</span>
+                                </div>
+                                
+                                <!-- Image Upload - Card Size -->
+                                <div class="form-group form-col-half">
+                                    <label>Preview do Card</label>
+                                    <div class="image-upload-full">
+                                        <div class="image-preview-card" id="image-preview" title="Clique para selecionar uma imagem">
+                                            <span id="image-placeholder">🖼️<br>Adicionar<br>Imagem</span>
+                                            <img id="preview-img" src="" alt="Preview" style="display: none;">
+                                            <button type="button" class="btn-remove-img-overlay" id="remove-image-btn" style="display: none;" onclick="removeCardImage()" title="Remover imagem">×</button>
+                                        </div>
+                                        <input type="file" id="card-image" accept="image/*" onchange="handleImageUpload(event)" style="display: none;">
                                     </div>
-                                    <button type="button" class="btn-remove-img" id="remove-image-btn" style="display: none;" onclick="removeCardImage()">×</button>
-                                    <input type="file" id="card-image" accept="image/*" onchange="handleImageUpload(event)" style="display: none;">
                                 </div>
                             </div>
                         </div>
@@ -233,20 +244,30 @@
                              CASCADE EDITOR - Visual Node Builder
                              ======================================== -->
                         <div class="form-section" id="cascade-editor-section" style="display: none;">
-                            <div class="cascade-editor">
-                                <div class="cascade-toolbar">
-                                    <span class="cascade-toolbar-label">Editor de Cascata</span>
-                                    <div class="cascade-toolbar-actions">
-                                        <button type="button" class="btn-add-node" onclick="addCascadeNode()">+ Nó</button>
+                            <div class="mindmap-editor">
+                                <div class="mindmap-toolbar">
+                                    <span class="mindmap-toolbar-label">Mapa Mental</span>
+                                    <div class="mindmap-toolbar-actions">
+                                        <button type="button" class="btn-add-mindmap-node" onclick="addMindMapNode()" title="Adicionar nó (Clique ou arraste no canvas)">+ Nó</button>
+                                        <button type="button" class="btn-mindmap-zoom" onclick="mindMapZoomIn()" title="Zoom In">+</button>
+                                        <button type="button" class="btn-mindmap-zoom" onclick="mindMapZoomOut()" title="Zoom Out">−</button>
+                                        <button type="button" class="btn-mindmap-reset" onclick="mindMapResetView()" title="Resetar Visão">⟳</button>
                                     </div>
                                 </div>
                                 
-                                <div class="cascade-canvas" id="cascade-canvas">
-                                    <div class="cascade-empty" id="cascade-empty">
-                                        <span>Clique em "+ Nó" para começar</span>
-                                    </div>
-                                    <div class="cascade-nodes" id="cascade-nodes">
+                                <div class="mindmap-canvas" id="mindmap-canvas">
+                                    <svg class="mindmap-connections" id="mindmap-connections">
+                                        <!-- Connection lines drawn here -->
+                                    </svg>
+                                    <div class="mindmap-nodes" id="mindmap-nodes">
                                         <!-- Nodes will be rendered here -->
+                                    </div>
+                                    <div class="mindmap-empty" id="mindmap-empty">
+                                        <div class="mindmap-empty-content">
+                                            <span class="mindmap-empty-icon">🧠</span>
+                                            <span>Clique em "+ Nó" para começar seu mapa mental</span>
+                                            <small>Arraste os nós para organizar suas ideias</small>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -265,7 +286,6 @@
 
                         <!-- Hidden fields for legacy data -->
                         <input type="hidden" id="card-description">
-                        <input type="hidden" id="card-resumo">
                         <input type="hidden" id="card-notas">
                         <input type="hidden" id="evento-consequences">
                         <input type="hidden" id="evento-hooks">
